@@ -1,0 +1,81 @@
+#include "bsp.h"
+
+             MODULE HAL
+             EXTERN GPIOconfig,state
+             PUBLIC SysConfig,PORT2_ISR,Delay,Delay_halfsec,ClrLEDS
+             PUBLIC delay_ms,PrintLEDS
+;-------------------------------------------------------------------------------
+             RSEG   CODE            
+;----------------- System Configuration ----------------------------------------
+SysConfig    call   #GPIOconfig
+             CLR    R7                ;state1 LEDS
+             MOV    #1,R8             ;state2 LEDS
+             ret
+;-------------------------- Clear Leds -----------------------------------------
+ClrLEDS      clr.b  LedsPort
+             ret
+;-------------------------------------------------------------------------------
+PORT2_ISR    push   #DebounceVal
+             call   #Delay
+             bit.b  #0x01,PBIntFlag   ;check if PB0 is pushed.
+             jnz    P2_0
+             bit.b  #0x02,PBIntFlag   ;check if PB1 is pushed.
+             jnz    P2_1
+             bit.b  #0x04,PBIntFlag   ;check if PB2 is pushed.
+             jnz    P2_2              ;stay at LPM0
+             bit.b  #0x08,PBIntFlag   ;check if PB3 is puched.
+             jnz    P2_3
+             reti
+             
+P2_0         mov    #1,state
+             jmp    exitLPM0
+P2_1         mov    #2,state
+             jmp    exitLPM0
+P2_2         mov    #3,state
+             jmp    exitLPM0
+P2_3         mov    #4,state
+
+exitLPM0     bic    #CPUOFF,0(SP)
+             bic.b  #0x0F,PBIntFlag
+             reti
+;------------------------------------Print Leds---------------------------------
+PrintLEDS    pop   R4  ;return address
+             pop   R5  ;byte to print
+             
+             mov.b R5,LedsPort
+             push R4
+             
+             ret
+;---------------------------------- Delay --------------------------------------
+Delay         pop   R4     ; return address
+              pop   R5     ; delay value
+L             dec.w R5
+              jnz   L
+              push  R4
+              ret
+  
+Delay1ms      mov.w #349,R15   ;wait 1msec
+L2            dec.w R15
+              jnz   L2
+              ret
+  
+delay_ms      pop   R4  ; return address  ;2cyc
+              pop   R5  ; delay value     ;2cyc
+              
+L3            call #Delay1ms       ;1057cyc
+              dec  R5              ;1
+              jnz  L3              ;2
+              
+              push R4              ;3
+              ret                  ;3
+
+              
+Delay_halfsec MOV      #609,R6       ; (12opcode/2^20+*0.8msec)*609 = 0.5 sec
+L4            push     #DebounceVal   ; delay value
+              call     #Delay
+              dec.w    R6            ;1 cycle
+              jnz      L4             ;2 cycles
+              ret
+;------------------------------------------------------------------------------
+              ENDMOD
+              END

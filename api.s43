@@ -1,0 +1,72 @@
+#include "bsp.h"
+
+           MODULE API
+           PUBLIC INCLEDS,LEDSLEFT,PWM,PrintArr
+           EXTERN Delay_halfsec,state,PrintLEDS,delay_ms
+;------------------------------------------------------------------------------        
+           RSEG   CODE
+;------------------------ Task 1 ----------------------------------------------
+
+INCLEDS    mov.b  R7,LedsPort     ; current leds state
+           mov.b  #20,R10         ; 20 * 0.5sec = 10sec
+loopinc    inc.b  LedsPort
+           call   #Delay_halfsec
+           dec.b  R10
+           jnz    loopinc
+           mov.b  LedsPort,R7     ; save current state
+           mov    #0,state        ; return to state0
+endin      ret
+
+;------------------------ Task 2 ----------------------------------------------
+
+LEDSLEFT   mov.b  R8,LedsPort     ; move 1 LED current state
+           mov.b  #14,R11         ; 14 * 0.5sec = 7sec
+loopleft   call   #Delay_halfsec           
+           rla.b  LedsPort
+           jc     startover
+           dec.b  R11
+           jnz    loopleft
+           mov.b  LedsPort,R8     ; save 1 LED current state
+           mov.b  #0,state        ; return to state0
+           ret
+           
+startover  mov.b  #0x01,LedsPort
+           dec.b  R11
+           jmp    loopleft
+           nop
+;------------------------ Task 3 ----------------------------------------------
+
+PWM        cmp      #3,state         
+           jnz      FINISH           
+           bis.b    #0x80,PWMPort    ; PWM ~ 1   , 5cycles
+           mov.b    #64,R12          ; 2cycles            
+loop_one   dec      R12              ; 1cycle
+           jnz      loop_one         ; 2cycle
+           
+           bic.b    #0x80,PWMPort    ; PWM ~ 0   , 5cycles
+           mov.b    #17,R12          ; 2cycles
+loop_zero  dec      R12              ; 1cycle
+           jnz      loop_zero        ; 2cycle
+           jmp      PWM              ; 2cycles
+FINISH     ret           
+
+;---------------------------------Task 4---------------------------------------
+PrintArr    pop     R14             ; return address
+            pop     R13             ; ID array address
+            pop     R12             ; Size
+            pop     R11             ; number of delay ms wanted, 250ms
+            
+L5          mov     @R13+,R10       ; get ID numbers
+            push.b  R10             ; number to print on LEDS
+            call    #PrintLEDS
+            push    R11             ; number of delay ms wanted
+            call    #delay_ms
+            dec     R12             ; decrease ID array size
+            jnz     L5
+            
+            push   R14
+            mov.b  #0,state        ; return to state0
+            ret
+
+           ENDMOD
+           END

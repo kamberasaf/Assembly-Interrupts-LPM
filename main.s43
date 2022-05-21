@@ -1,0 +1,59 @@
+#include "bsp.h"
+
+            NAME   MAIN
+            PUBLIC state
+            EXTERN SysConfig,INCLEDS,LEDSLEFT,PWM,delay_ms
+            EXTERN PORT2_ISR,Delay,Delay_halfsec,PrintArr
+;------------------------------------------------------------------------------
+             ORG    0x200      ;RAM segment
+;------------------------------------------------------------------------------
+state        DW     0
+ID           DW     0,8,4,8,8,9,7,3
+Size         DW     8
+curr_state   DB     0 
+;------------------------------------------------------------------------------
+         ORG    0x0C000    ;Code segment
+         RSEG   CSTACK
+         RSEG   CODE
+;------------------------------------------------------------------------------
+MAIN     mov.w  #SFE(CSTACK),SP
+STOP     mov.w  #WDTPW+WDTHOLD,&WDTCTL
+         call   #SysConfig
+;------------------------------------------------------------------------------
+state0   cmp    #0,state
+         jnz    state1
+         bis.w  #CPUOFF+GIE,SR
+
+state1   cmp    #1,state
+         jnz    state2
+         DINT                    ;GIE = 0
+         call   #INCLEDS
+         EINT                    ;GIE = 1
+         
+state2   cmp    #2,state
+         jnz    state3
+         DINT                   ;GIE = 0
+         call   #LEDSLEFT
+         EINT                   ;GIE = 1
+
+state3   cmp    #3,state
+         jnz    state4
+         call   #PWM
+         
+state4   cmp    #4,state
+         jnz    state0
+         push   #250          ;250 ms delay
+         push   Size          ;ID length = 8
+         mov    #ID,R8        ;ID address
+         push   R8
+         call   #PrintArr
+         jmp    state0
+
+;------------------------------------------------------------------------------
+         COMMON INTVEC
+;------------------------------------------------------------------------------
+         ORG    PORT2_VECTOR    ;PORT2 interrupt vector
+         DW     PORT2_ISR
+         ORG    RESET_VECTOR
+         DW     MAIN
+         END

@@ -1,0 +1,27 @@
+#include "bsp.h"
+
+           MODULE BSP
+           PUBLIC GPIOconfig
+;------------------------------------------------------------------------------           
+           RSEG CODE
+;-------------------- GPIO Configurations -------------------------------------
+GPIOconfig
+          ;Push Buttons Configutarion
+          bic.b    #0xFF,PBSEL     ; for P2.6,P2.7 to be GPIO.
+          bic.b    #0x0F,PBDIR
+          bis.b    #0x80,PBDIR
+          bis.b    #0x03,PBEdgeT   ; pull-up - rising edge.
+          bic.b    #0x0C,PBEdgeT   ; pull-down - falling edge.
+          bis.b    #0x0F,PBIntEn
+          bic.b    #0x0F,PBIntFlag
+          
+          ;Leds Configuration
+          clr.b    LedsPort
+          bic.b    #0xFF,LedsPortSEL
+          bis.b    #0xFF,LedsPortDIR
+          bic.b    #0xC0,&P2SEL
+          
+          ret
+;------------------------------------------------------------------------------          
+          ENDMOD
+          END         
