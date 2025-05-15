@@ -1,0 +1,140 @@
+;*****************************************************************************
+; File: hal.s43 - Hardware Abstraction Layer for Interrupts and LPM Lab
+; Authors: Asaf Kamber, Aviv Primor
+; Course: Introduction to Computers - Lab 4
+; Description: Implements low-level hardware functions, timing utilities,
+;              and interrupt handling for the MSP430 microcontroller.
+;*****************************************************************************
+#include "bsp.h"
+             MODULE HAL
+             EXTERN GPIOconfig,state
+             PUBLIC SysConfig,PORT2_ISR,Delay,Delay_halfsec,ClrLEDS
+             PUBLIC delay_ms,PrintLEDS
+;-------------------------------------------------------------------------------
+             RSEG   CODE            
+;-------------------------------------------------------------------------------
+; Function: SysConfig
+; Description: Initializes the system hardware configuration
+; Inputs: None
+; Outputs: R7 - Initialized to 0 for state 1 LEDs
+;          R8 - Initialized to 1 for state 2 LEDs
+;-------------------------------------------------------------------------------
+SysConfig    call   #GPIOconfig     ; Configure GPIO ports
+             CLR    R7              ; Initialize state 1 LEDs value to 0
+             MOV    #1,R8           ; Initialize state 2 LEDs value to 1 (rightmost LED)
+             ret
+
+;-------------------------------------------------------------------------------
+; Function: ClrLEDS
+; Description: Turns off all LEDs
+; Inputs: None
+; Outputs: None
+;-------------------------------------------------------------------------------
+ClrLEDS      clr.b  LedsPort        ; Clear all bits in LED port (turn off all LEDs)
+             ret
+
+;-------------------------------------------------------------------------------
+; Function: PORT2_ISR
+; Description: Port 2 interrupt service routine for push button handling
+;              Changes system state based on which button was pressed
+;              and exits low power mode
+; Inputs: None from registers, reads interrupt flags
+; Outputs: state - Updated based on button pressed
+;-------------------------------------------------------------------------------
+PORT2_ISR    push   #DebounceVal    ; Push debounce delay value
+             call   #Delay          ; Call delay for debouncing
+             
+             bit.b  #0x01,PBIntFlag ; Check if PB0 (P2.0) is pushed
+             jnz    P2_0            ; Jump to PB0 handler if set
+             bit.b  #0x02,PBIntFlag ; Check if PB1 (P2.1) is pushed
+             jnz    P2_1            ; Jump to PB1 handler if set
+             bit.b  #0x04,PBIntFlag ; Check if PB2 (P2.2) is pushed
+             jnz    P2_2            ; Jump to PB2 handler if set
+             bit.b  #0x08,PBIntFlag ; Check if PB3 (P2.3) is pushed
+             jnz    P2_3            ; Jump to PB3 handler if set
+             reti                   ; Return from interrupt if no button detected
+             
+P2_0         mov    #1,state        ; Set state to 1 (INCLEDS task)
+             jmp    exitLPM0        ; Exit low power mode
+P2_1         mov    #2,state        ; Set state to 2 (LEDSLEFT task)
+             jmp    exitLPM0        ; Exit low power mode
+P2_2         mov    #3,state        ; Set state to 3 (PWM task)
+             jmp    exitLPM0        ; Exit low power mode
+P2_3         mov    #4,state        ; Set state to 4 (PrintArr task)
+exitLPM0     bic    #CPUOFF,0(SP)   ; Clear CPUOFF bit in saved SR to exit LPM0
+             bic.b  #0x0F,PBIntFlag ; Clear all push button interrupt flags
+             reti                   ; Return from interrupt
+
+;-------------------------------------------------------------------------------
+; Function: PrintLEDS
+; Description: Displays a byte value on the LEDs
+; Stack Parameters:
+;   - Value to display on LEDs
+; Outputs: None
+;-------------------------------------------------------------------------------
+PrintLEDS    pop   R4               ; Get return address
+             pop   R5               ; Get byte to print on LEDs
+             
+             mov.b R5,LedsPort      ; Output value to LED port
+             push  R4               ; Push return address for ret instruction
+             
+             ret
+
+;-------------------------------------------------------------------------------
+; Function: Delay
+; Description: General-purpose software delay loop
+; Stack Parameters:
+;   - Delay count value 
+; Outputs: None
+;-------------------------------------------------------------------------------
+Delay         pop   R4              ; Get return address
+              pop   R5              ; Get delay value
+L             dec.w R5              ; Decrement delay counter
+              jnz   L               ; Loop until counter reaches 0
+              push  R4              ; Push return address for ret instruction
+              ret
+  
+;-------------------------------------------------------------------------------
+; Function: Delay1ms
+; Description: Precise 1 millisecond delay
+; Inputs: None
+; Outputs: None
+;-------------------------------------------------------------------------------
+Delay1ms      mov.w #349,R15        ; Initialize counter for 1ms delay (349 iterations)
+L2            dec.w R15             ; Decrement counter
+              jnz   L2              ; Loop until counter reaches 0
+              ret
+  
+;-------------------------------------------------------------------------------
+; Function: delay_ms
+; Description: Variable millisecond delay function
+; Stack Parameters:
+;   - Number of milliseconds to delay
+; Outputs: None
+;-------------------------------------------------------------------------------
+delay_ms      pop   R4              ; Get return address (2 cycles)
+              pop   R5              ; Get delay value in ms (2 cycles)
+              
+L3            call  #Delay1ms       ; Delay for 1ms (1057 cycles)
+              dec   R5              ; Decrement millisecond counter (1 cycle)
+              jnz   L3              ; Loop if not zero (2 cycles)
+              
+              push  R4              ; Push return address (3 cycles)
+              ret                   ; Return to caller (3 cycles)
+              
+;-------------------------------------------------------------------------------
+; Function: Delay_halfsec
+; Description: Precise 0.5 second delay
+; Inputs: None
+; Outputs: None
+;-------------------------------------------------------------------------------
+Delay_halfsec MOV      #609,R6      ; Initialize counter (609 * ~0.82ms = 0.5 sec)
+L4            push     #DebounceVal ; Push debounce delay value
+              call     #Delay       ; Call delay function
+              dec.w    R6           ; Decrement counter (1 cycle)
+              jnz      L4           ; Loop if not zero (2 cycles)
+              ret                   ; Return to caller
+
+;------------------------------------------------------------------------------
+              ENDMOD
+              END

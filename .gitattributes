@@ -1,0 +1,3 @@
+
+# Gitattributes for Assembly Language Recognition
+*.s43 linguist-language=Assembly

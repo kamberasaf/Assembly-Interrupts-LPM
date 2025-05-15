@@ -1,0 +1,74 @@
+;*****************************************************************************
+; File: main.s43 - Main Program for Interrupts and LPM Lab
+; Authors: Asaf Kamber, Aviv Primor
+; Course: Introduction to Computers - Lab 4
+; Description: Implements a finite state machine that manages different tasks
+;              using interrupts and low power mode on the MSP430 microcontroller.
+;*****************************************************************************
+#include "bsp.h"
+            NAME   MAIN
+            PUBLIC state
+            EXTERN SysConfig,INCLEDS,LEDSLEFT,PWM,delay_ms
+            EXTERN PORT2_ISR,Delay,Delay_halfsec,PrintArr
+;-------------------------------------------------------------------------------
+; Data Section - Memory allocation for variables
+;-------------------------------------------------------------------------------
+             ORG    0x200           ; Start of RAM segment
+;-------------------------------------------------------------------------------
+state        DW     0               ; Current system state (0-4)
+ID           DW     0,8,4,8,8,9,7,3 ; ID digits array
+Size         DW     8               ; Size of ID array
+curr_state   DB     0               ; Backup of current state (not used)
+;-------------------------------------------------------------------------------
+; Code Section
+;-------------------------------------------------------------------------------
+         ORG    0x0C000             ; Start of code segment
+         RSEG   CSTACK              ; C stack segment
+         RSEG   CODE                ; Code segment
+;-------------------------------------------------------------------------------
+; Main program entry point
+;-------------------------------------------------------------------------------
+MAIN     mov.w  #SFE(CSTACK),SP     ; Initialize stack pointer
+STOP     mov.w  #WDTPW+WDTHOLD,&WDTCTL ; Stop watchdog timer
+         call   #SysConfig          ; Initialize system configuration
+;-------------------------------------------------------------------------------
+; Finite State Machine implementation
+;-------------------------------------------------------------------------------
+state0   cmp    #0,state            ; Check if in state 0 (idle)
+         jnz    state1              ; If not, check for state 1
+         bis.w  #CPUOFF+GIE,SR      ; Enter low power mode (LPM0) with interrupts enabled
+         
+state1   cmp    #1,state            ; Check if in state 1 (INCLEDS)
+         jnz    state2              ; If not, check for state 2
+         DINT                       ; Disable interrupts
+         call   #INCLEDS            ; Execute INCLEDS task (incrementing LEDs)
+         EINT                       ; Enable interrupts
+         
+state2   cmp    #2,state            ; Check if in state 2 (LEDSLEFT)
+         jnz    state3              ; If not, check for state 3
+         DINT                       ; Disable interrupts
+         call   #LEDSLEFT           ; Execute LEDSLEFT task (shifting LED)
+         EINT                       ; Enable interrupts
+         
+state3   cmp    #3,state            ; Check if in state 3 (PWM)
+         jnz    state4              ; If not, check for state 4
+         call   #PWM                ; Execute PWM task
+         
+state4   cmp    #4,state            ; Check if in state 4 (PrintArr)
+         jnz    state0              ; If not, return to state 0
+         push   #250                ; Push 250ms delay between digits
+         push   Size                ; Push ID array size (8)
+         mov    #ID,R8              ; Get address of ID array
+         push   R8                  ; Push address of ID array
+         call   #PrintArr           ; Execute PrintArr task (display ID on LEDs)
+         jmp    state0              ; Return to state 0 (idle)
+;-------------------------------------------------------------------------------
+; Interrupt Vector Table
+;-------------------------------------------------------------------------------
+         COMMON INTVEC              ; Common interrupt vectors segment
+;-------------------------------------------------------------------------------
+         ORG    PORT2_VECTOR        ; Port 2 interrupt vector
+         DW     PORT2_ISR           ; Address of Port 2 ISR
+         ORG    RESET_VECTOR        ; Reset vector
+         DW     MAIN                ; Address of main program
+         END

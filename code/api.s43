@@ -1,0 +1,102 @@
+;*****************************************************************************
+; File: api.s43 - API Layer for Interrupts and LPM Lab
+; Authors: Asaf Kamber, Aviv Primor
+; Course: Introduction to Computers - Lab 4
+; Description: Application Programming Interface (API) layer implementing
+;              high-level tasks for LED patterns, PWM, and array printing.
+;*****************************************************************************
+#include "bsp.h"
+           MODULE API
+           PUBLIC INCLEDS,LEDSLEFT,PWM,PrintArr
+           EXTERN Delay_halfsec,state,PrintLEDS,delay_ms
+;------------------------------------------------------------------------------        
+           RSEG   CODE
+;-------------------------------------------------------------------------------
+; Function: INCLEDS - Task 1
+; Description: Increments the LED pattern every 0.5 seconds for 10 seconds total
+; Inputs: R7 - Current LEDs state
+; Outputs: R7 - Updated LEDs state
+;          state - Set to 0 to return to idle state
+;-------------------------------------------------------------------------------
+INCLEDS    mov.b  R7,LedsPort     ; Set initial LED state from saved value
+           mov.b  #20,R10         ; Initialize counter for 20 iterations (20 * 0.5sec = 10sec)
+loopinc    inc.b  LedsPort        ; Increment LED pattern
+           call   #Delay_halfsec   ; Wait 0.5 seconds
+           dec.b  R10             ; Decrement counter
+           jnz    loopinc         ; Continue if counter != 0
+           mov.b  LedsPort,R7     ; Save current LED state for next execution
+           mov    #0,state        ; Return to state 0 (idle)
+endin      ret                    ; Return to caller
+
+;-------------------------------------------------------------------------------
+; Function: LEDSLEFT - Task 2
+; Description: Shifts a single LED to the left every 0.5 seconds for 7 seconds
+;              Starts over from rightmost LED when leftmost LED is reached
+; Inputs: R8 - Current position of LED
+; Outputs: R8 - Updated position of LED
+;          state - Set to 0 to return to idle state
+;-------------------------------------------------------------------------------
+LEDSLEFT   mov.b  R8,LedsPort     ; Set initial LED state from saved value
+           mov.b  #14,R11         ; Initialize counter for 14 iterations (14 * 0.5sec = 7sec)
+loopleft   call   #Delay_halfsec  ; Wait 0.5 seconds          
+           rla.b  LedsPort        ; Rotate LED pattern left through carry
+           jc     startover       ; If carry set (leftmost LED was on), start over
+           dec.b  R11             ; Decrement counter
+           jnz    loopleft        ; Continue if counter != 0
+           mov.b  LedsPort,R8     ; Save current LED state for next execution
+           mov.b  #0,state        ; Return to state 0 (idle)
+           ret                    ; Return to caller
+           
+startover  mov.b  #0x01,LedsPort  ; Reset to rightmost LED
+           dec.b  R11             ; Decrement counter
+           jmp    loopleft        ; Continue the loop
+           nop                    ; No operation (for alignment)
+
+;-------------------------------------------------------------------------------
+; Function: PWM - Task 3
+; Description: Generates a software PWM signal on PWMPort with approx. 75% duty cycle
+;              This is a continuous operation until state changes
+; Inputs: state - Must be 3 to continue PWM generation
+; Outputs: None, function doesn't return until state changes
+;-------------------------------------------------------------------------------
+PWM        cmp      #3,state      ; Check if still in PWM state         
+           jnz      FINISH        ; Exit if state has changed           
+           bis.b    #0x80,PWMPort ; Set PWM output high
+           mov.b    #64,R12       ; High time duration (64 cycles)            
+loop_one   dec      R12           ; Decrement counter
+           jnz      loop_one      ; Loop until counter = 0
+           
+           bic.b    #0x80,PWMPort ; Set PWM output low
+           mov.b    #17,R12       ; Low time duration (17 cycles)
+loop_zero  dec      R12           ; Decrement counter
+           jnz      loop_zero     ; Loop until counter = 0
+           jmp      PWM           ; Repeat PWM cycle
+FINISH     ret                    ; Return to caller when state changes
+
+;-------------------------------------------------------------------------------
+; Function: PrintArr - Task 4
+; Description: Displays each element of an array on the LEDs with a time delay
+; Stack Parameters (in order of pushing):
+;   - Delay in ms between displaying each element
+;   - Size of the array
+;   - Address of the array to display
+; Outputs: state - Set to 0 to return to idle state
+;-------------------------------------------------------------------------------
+PrintArr    pop     R14           ; Get return address
+            pop     R13           ; Get ID array address
+            pop     R12           ; Get array size
+            pop     R11           ; Get delay time in ms (250ms)
+            
+L5          mov     @R13+,R10     ; Get next ID digit from array, increment pointer
+            push.b  R10           ; Push digit to display on LEDs
+            call    #PrintLEDS    ; Call function to display on LEDs
+            push    R11           ; Push delay time
+            call    #delay_ms     ; Delay for specified time
+            dec     R12           ; Decrement array size counter
+            jnz     L5            ; Continue if more array elements
+            
+            push    R14           ; Push return address for ret instruction
+            mov.b   #0,state      ; Return to state 0 (idle)
+            ret                   ; Return to caller
+           ENDMOD
+           END

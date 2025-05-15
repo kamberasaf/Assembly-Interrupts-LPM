@@ -1,0 +1,41 @@
+;*****************************************************************************
+; File: bsp.s43 - Board Support Package for Interrupts and LPM Lab
+; Authors: Asaf Kamber, Aviv Primor
+; Course: Introduction to Computers - Lab 4
+; Description: Hardware-specific configurations for the MSP430 microcontroller,
+;              including GPIO setup for LEDs, push buttons, and PWM.
+;*****************************************************************************
+#include "bsp.h"
+           MODULE BSP
+           PUBLIC GPIOconfig
+;------------------------------------------------------------------------------           
+           RSEG CODE
+;-------------------------------------------------------------------------------
+; Function: GPIOconfig
+; Description: Configures GPIO ports for LEDs, push buttons, and PWM
+;              - LED ports (P1) configured as outputs
+;              - Push button ports (P2.0-P2.3) configured as inputs with interrupts
+;              - PWM port (P2.7) configured as output
+; Inputs: None
+; Outputs: None
+;-------------------------------------------------------------------------------
+GPIOconfig
+          ;----- Push Buttons Configuration -----
+          bic.b    #0xFF,PBSEL     ; Set P2 pins as GPIO (not peripheral function)
+          bic.b    #0x0F,PBDIR     ; Set P2.0-P2.3 as inputs (push buttons)
+          bis.b    #0x80,PBDIR     ; Set P2.7 as output (PWM)
+          bis.b    #0x03,PBEdgeT   ; Set P2.0-P2.1 for rising edge trigger (pull-up)
+          bic.b    #0x0C,PBEdgeT   ; Set P2.2-P2.3 for falling edge trigger (pull-down)
+          bis.b    #0x0F,PBIntEn   ; Enable interrupts for P2.0-P2.3
+          bic.b    #0x0F,PBIntFlag ; Clear any pending interrupt flags
+          
+          ;----- LEDs Configuration -----
+          clr.b    LedsPort        ; Initialize all LEDs to off
+          bic.b    #0xFF,LedsPortSEL ; Set all P1 pins as GPIO (not peripheral function)
+          bis.b    #0xFF,LedsPortDIR ; Set all P1 pins as outputs (LEDs)
+          bic.b    #0xC0,&P2SEL    ; Ensure P2.6-P2.7 are in GPIO mode
+          
+          ret                      ; Return to caller
+;------------------------------------------------------------------------------          
+          ENDMOD
+          END         
